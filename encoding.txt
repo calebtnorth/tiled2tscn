@@ -1,0 +1,13 @@
+xxx00000000000000000000000000000
+
+TILED  ROTATION     GODOT
+    0  UP               0
+  101  RIGHT         -011
+  110  DOWN           011
+  011  LEFT          -010
+  100  MIRROR UP      001
+  111  MIRROR RIGHT  -001
+  010  MIRROR DOWN    010
+  001  MIRROR LEFT   -100
+
+  

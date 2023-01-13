@@ -1,11 +1,31 @@
+# MIT License
 
-# Tiled 2 HVA
-# by Caleb "fivesixfive" North
+# Copyright (c) 2023 Caleb North
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 ###############
 ### IMPORTS ###
 ###############
 from os.path import join, split, normpath, normcase, exists
+from os import makedirs, listdir, remove
+from shutil import copy
 from sys import argv
 from termcolor import cprint
 import xml.etree.ElementTree as element_tree
@@ -186,7 +206,7 @@ class Tilemap:
         #print(tscn)
 
         # Write tscn
-        return tscn, tres, [self.tileset_list[set][0].image_path for set in self.tileset_list]
+        return tscn, tres, [self.tileset_list[set][0].full_image_path for set in self.tileset_list]
 
     @property
     def _valid(self) -> bool:
@@ -240,6 +260,7 @@ class Tileset:
                         
 
         # Grab image
+        self.full_image_path = normpath(self.root[0].attrib["source"])
         self.image_path = normpath(split(self.root[0].attrib["source"])[1])
 
         # Grab shapes
@@ -387,12 +408,46 @@ def main():
     except FileTypeError as error:
         cprint(f"Cannot pass {error.args[0]} to Tilemap; must be .tmx format", "red")
         return
-
+ 
     tscn = tilemap._generate()
-    
+    file_name = tilemap.mode + "_" + tilemap.name
+    file_path = split(tscn_filepath)[0]
+    full_file_path = join(file_path, file_name)
 
-    # Attempt to load folder
-    print(tscn[2])
+    
+    # Try to load folder at location
+    cprint(f"Attempting to create or open folder at {full_file_path}\\", "yellow")
+    if not exists(full_file_path):
+        makedirs(full_file_path)
+        cprint(f"Created {file_name} folder at {file_path}")
+    else:
+        cprint(f"A folder already exists at this location. Wipe all contents before proceeding? (y/n)", "light_red", end="")
+        response = input(" ")
+        
+        if response != "y":
+            cprint("Process cancelled", "red")
+            quit()
+
+        # Gut folder
+        for file in listdir(full_file_path):
+            cprint(f"Removed {file}")
+            remove(join(full_file_path, file))
+
+    # Move images
+    for image in tscn[2]:
+        copy(join(file_path, image), full_file_path)
+        cprint(f"Copied {image} to {full_file_path}", "green")
+
+    # Write .tres
+    with open(join(full_file_path, f"{file_name}.tres"), "w") as file:
+        file.write(tscn[1])
+        cprint(f"Wrote {file_name}.tres to {full_file_path}", "green")
+    
+    # Write .tscn
+    with open(join(full_file_path, f"{file_name}.tscn"), "w") as file:
+        file.write(tscn[0])
+        cprint(f"Wrote {file_name}.tscn to {full_file_path}", "green")                  
+
 
 ##############
 ### ERRORS ###
