@@ -1,11 +1,12 @@
-# MIT License
+# tiled2hva
+# A CLI tool to convert Tiled .tmx files to Godot .tscn for High Velocity Arena 
 
 # Copyright (c) 2023 Caleb North
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sellcccccc
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
 
@@ -23,12 +24,14 @@
 ###############
 ### IMPORTS ###
 ###############
-from os.path import join, split, normpath, normcase, exists
-from os import makedirs, listdir, remove
-from shutil import copy
-from sys import argv
-from termcolor import cprint
 import xml.etree.ElementTree as element_tree
+import argparse
+
+from os.path import join, split, normpath, exists, abspath
+from os import makedirs, listdir, remove
+
+from shutil import copy
+from termcolor import cprint
 
 ###############
 ### TILEMAP ###
@@ -37,14 +40,14 @@ class Tilemap:
 
     def __init__(self, filepath:str) -> None:
         self.filepath = filepath
+        self.file_name = split(self.filepath)[1]
 
         # Check if file exists
         if not self._valid:
-            raise FileNotFoundError(filepath)
-
+            throw("Tileset file cannot be found")
         # Check filetype
         if not self.filepath.endswith('.tmx'):
-            raise FileTypeError(filepath, '.tmx')
+            throw("Tileset file must be .tmx format")
             
         # Parse filepath
         self.filepath = split(self.filepath)
@@ -64,28 +67,23 @@ class Tilemap:
         # Grab properties
         self.name = None
         self.mode = None
+
         if self.root[0].tag == "properties":
-
             properties = [property.attrib for property in self.root[0]]
-
             for property in properties:
                 match property.get("name"):
                     case "hva:name":
                         self.name = property["value"]
-
                     case "hva:mode":
                         self.mode = property["value"]
-
                     case _:
                         pass
 
         if self.name == None:
-            cprint(f"hva:name property not provided in {self.filepath[1]}", "red")
-            quit()
+            throw(f"Property hva:name not provided in Tilemap \"{self.filepath[1]}\"")
 
         if self.mode == None:
-            cprint(f"hva:mode property not provided in {self.filepath[1]}", "red")
-            quit()
+            throw(f"Property hva:mode not provided in Tilemap \"{self.filepath[1]}\"")
 
         tag_index = 1
 
@@ -99,11 +97,10 @@ class Tilemap:
                 tileset = Tileset(join(self.filepath[0], tilemap_set.attrib["source"]))
             
             except FileNotFoundError as error:
-                cprint(f"{split(error.args[0])[1]} in Tilemap cannot be found", "red")
-                quit()
+                throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" cannot be found")
+
             except FileTypeError as error:
-                cprint(f"{split(error.args[0])[1]} invalid in Tilemap; must be .tsx format", "red")
-                quit()
+                throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" must be .tsx format")
                 
             tileset_data = (tileset, int(tilemap_set.attrib["firstgid"]))
             self.tileset_list[tag_index] = tileset_data
@@ -123,8 +120,7 @@ class Tilemap:
                 layer[0:] = layer[1:]
 
             if layer[0].attrib.get("encoding") != "csv":
-                cprint("Tilemaps must be encoded in csv format!", "red")
-                quit()
+                throw("Tilemaps must be encoded in csv format!")
 
             # For each row in the layer
             for row in layer[0].text.strip().split("\n"):
@@ -232,6 +228,7 @@ class Tileset:
         self.tree = element_tree.parse(filepath)
         self.root = self.tree.getroot()
         self.root_attrib = self.root.attrib
+        self.name = self.root_attrib["name"]
 
         # Trim out editor settings
         if self.root[0].tag == "editorsettings":
@@ -247,16 +244,26 @@ class Tileset:
         # Grab columns
         self.columns = int(self.root_attrib["columns"])
 
-        # Grab tile count
-        self.tile_count = int(self.root_attrib["tilecount"])
+        # Grab properties
+        self.tile_count = None
+
         if self.root[0].tag == "properties":
-            for property in self.root[0]:
-                if property.attrib.get("name") == "hva:tiles":
-                    if property.attrib["type"] != "int":
-                        raise TypeError("Incorrect property type for \"hva:tiles\"")
-                    self.tile_count = int(property.attrib["value"])
+            properties = [property.attrib for property in self.root[0]]
+            for property in properties:
+                match property.get("name"):
+                    case "hva:tiles":
+                        try:
+                            self.tile_count = int(property["value"])
+                        except ValueError:
+                            throw(f"Property hva:tiles in Tileset \"{self.name}\" must be type int")
+                    case _:
+                        pass
+
+        if self.tile_count == None:
+            cprint(f"[/] Property hva:name not provided in Tileset \"{self.name}\", defaulting to Tiled value", "yellow")
+            self.tile_count = int(self.root_attrib["tilecount"])
             
-            self.root[0:] = self.root[1:]
+        self.root[0:] = self.root[1:]
                         
 
         # Grab image
@@ -265,7 +272,7 @@ class Tileset:
 
         # Grab shapes
         self.shapes = []
-        self.objects = 0
+        self.object_id = 0
         for tile in self.root[2:]:
             # TODO deal with concave objects
             if tile[0].tag != "objectgroup":
@@ -273,7 +280,7 @@ class Tileset:
 
             for object in tile[0]:
                 points = []
-                self.objects += 1
+                self.object_id += 1
 
                 # Check if square or not
                 if "width" in object.attrib:
@@ -283,7 +290,7 @@ class Tileset:
                     height = object.attrib["height"]
                     points = [ (x, y), (x, width), (height, width), (height, y) ]
                     self.shapes.append((
-                        int(tile.attrib["id"]), self.objects, points
+                        int(tile.attrib["id"]), self.object_id, points
                     ))
 
                 elif len(object) > 0:
@@ -293,7 +300,7 @@ class Tileset:
                         y = max(0, min(int(point.split(",")[1]) + int(object.attrib["y"]), self.tile_size[1]))
                         points.append((x, y))
                     self.shapes.append((
-                        int(tile.attrib["id"]), self.objects, points
+                        int(tile.attrib["id"]), self.object_id, points
                     ))
 
     @property
@@ -389,64 +396,55 @@ class Tileset:
 ### RUN ###
 ###########
 def main():
-    # Grab filepath
-    try:
-        tscn_filepath = argv[1]
-    except IndexError:
-        cprint("No filepath provided!", "red")
-        return
+    # Create argument parser
+    parser = argparse.ArgumentParser(
+        prog = "tiled2hva",
+        description =  "Converts Tiled .tmx files to Godot .tscn for High Velocity Arena",
+    )
+    parser.add_argument('filepath', type=str)
+    args = parser.parse_args()
 
-    # Normalize filepath
-    tscn_filepath = normpath(normcase(tscn_filepath))
+    # Grab filepath
+    tscn_filepath = abspath(normpath(args.filepath))
 
     # Create Tilemap
-    try:
-        tilemap = Tilemap(tscn_filepath)
-    except FileNotFoundError as error:
-        cprint(f"{error} cannot be found", "red")
-        return
-    except FileTypeError as error:
-        cprint(f"Cannot pass {error.args[0]} to Tilemap; must be .tmx format", "red")
-        return
- 
-    tscn = tilemap._generate()
-    file_name = tilemap.mode + "_" + tilemap.name
-    file_path = split(tscn_filepath)[0]
-    full_file_path = join(file_path, file_name)
+    tilemap = Tilemap(tscn_filepath)
+    map = tilemap._generate()
 
-    
-    # Try to load folder at location
-    cprint(f"Attempting to create or open folder at {full_file_path}\\", "yellow")
-    if not exists(full_file_path):
-        makedirs(full_file_path)
-        cprint(f"Created {file_name} folder at {file_path}")
+    # Filepath / name combinations
+    map_name = tilemap.mode + "_" + tilemap.name
+    folder_path = split(tscn_filepath)[0]
+    full_folder_path = join(folder_path, map_name)
+
+    # Try to make folder at location
+    if not exists(full_folder_path):
+        makedirs(full_folder_path)
+        cprint(f"[+] Created {map_name} folder at {folder_path}", "green")
+    # Folder exists, try wiping
     else:
-        cprint(f"A folder already exists at this location. Wipe all contents before proceeding? (y/n)", "light_red", end="")
-        response = input(" ")
-        
+        cprint(f"[?] The destination subfolder /{map_name} already exists. Wipe all contents to proceed? (y/n)", "yellow", end="")
+        response = input(" ") 
         if response != "y":
-            cprint("Process cancelled", "red")
-            quit()
+            throw()
 
         # Gut folder
-        for file in listdir(full_file_path):
-            cprint(f"Removed {file}")
-            remove(join(full_file_path, file))
+        for file in listdir(full_folder_path):
+            remove(join(full_folder_path, file))
 
+    copied_files = 0
     # Move images
-    for image in tscn[2]:
-        copy(join(file_path, image), full_file_path)
-        cprint(f"Copied {image} to {full_file_path}", "green")
+    for image in map[2]:
+        copy(join(folder_path, image), full_folder_path)
+        copied_files += 1
 
     # Write .tres
-    with open(join(full_file_path, f"{file_name}.tres"), "w") as file:
-        file.write(tscn[1])
-        cprint(f"Wrote {file_name}.tres to {full_file_path}", "green")
-    
-    # Write .tscn
-    with open(join(full_file_path, f"{file_name}.tscn"), "w") as file:
-        file.write(tscn[0])
-        cprint(f"Wrote {file_name}.tscn to {full_file_path}", "green")                  
+    with open(join(full_folder_path, f"{map_name}.tres"), "w") as file:
+        file.write(map[1])
+
+    with open(join(full_folder_path, f"{map_name}.tscn"), "w") as file:
+        file.write(map[0])
+
+    cprint(f"[+] Map {map_name} written to {full_folder_path}", "green")
 
 
 ##############
@@ -462,8 +460,22 @@ class FileTypeError(Exception):
 def log(msg):
     print(msg)
 
+############
+### KILL ###
+############
+def throw(msg:str=None) -> None:
+    if msg == None:
+        cprint("[-] Process killed", "red")
+    else:
+        cprint(f"[-] {msg}", "red")
+    quit(1)
+
 ###########
 ### RUN ###
 ###########
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        throw()
+    quit(0)
