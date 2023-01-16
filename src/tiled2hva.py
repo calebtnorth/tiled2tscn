@@ -26,9 +26,11 @@
 ###############
 import xml.etree.ElementTree as element_tree
 import argparse
+import colorama
 
 from os.path import join, split, normpath, exists, abspath
 from os import makedirs, listdir, remove
+from sys import exit
 
 from shutil import copy
 from termcolor import cprint
@@ -396,6 +398,7 @@ class Tileset:
 ### RUN ###
 ###########
 def main():
+    colorama.init()
     # Create argument parser
     parser = argparse.ArgumentParser(
         prog = "tiled2hva",
@@ -422,7 +425,7 @@ def main():
         cprint(f"[+] Created {map_name} folder at {folder_path}", "green")
     # Folder exists, try wiping
     else:
-        cprint(f"[?] The destination subfolder /{map_name} already exists. Wipe all contents to proceed? (y/n)", "yellow", end="")
+        cprint(f"[?] The destination subfolder /{map_name} already exists. Wipe all contents to proceed? (y/n)", "light_yellow", end="")
         response = input(" ") 
         if response != "y":
             throw()
@@ -468,7 +471,7 @@ def throw(msg:str=None) -> None:
         cprint("[-] Process killed", "red")
     else:
         cprint(f"[-] {msg}", "red")
-    quit(1)
+    exit(1)
 
 ###########
 ### RUN ###
@@ -478,4 +481,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         throw()
-    quit(0)
+    exit(0)
