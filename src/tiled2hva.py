@@ -149,7 +149,7 @@ class Tilemap:
     
     def _generate(self) -> tuple:
         # Generate tres first
-        tres = Tileset._generate_tres([tileset[0] for tileset in self.tileset_list.values()])
+        tres = Tileset._generate_tres([tileset for tileset, firstgid in self.tileset_list])
 
         # Generate tscn
         tscn = "[gd_scene load_steps=2 format=2]\n\n"
@@ -183,7 +183,7 @@ class Tilemap:
             tscn += ", ".join(flat_layer)+")"
 
         # Write tscn
-        return tscn, tres, [self.tileset_list[set][0].full_image_path for set in self.tileset_list]
+        return tscn, tres, [tileset.full_image_path for tileset, firstgid in self.tileset_list]
 
     @property
     def _valid(self) -> bool:
@@ -245,11 +245,8 @@ class Tileset:
 
             for object in objectgroup:
                 self.object_id += 1
-                points = []
-                print(object)
-                # Store shape
                 self.shapes.append((
-                    int(tile.attrib["id"]), self.object_id, points
+                    int(tile.attrib["id"]), self.object_id, TiledUtil.object_to_points(object)
                 ))
 
     @property
@@ -359,7 +356,7 @@ class TiledUtil:
         elif len(object) > 0:
             if not object.find("polygon"):
                 return []
-                
+
             for point in object[0].attrib["points"].split(" "):
                 points.append(
                     int(point.split(",")[0]) + int(object.attrib["x"]),
