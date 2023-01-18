@@ -57,42 +57,34 @@ class Tilemap:
         # Load file
         self.tree = element_tree.parse(filepath)
         self.root = self.tree.getroot()
-        self.root_attrib = self.root.attrib
         
-        # Trim out editor settings
-        if self.root[0].tag == "editorsettings":
-            self.root = self.root[1:]
-
         # Grab tile size
-        self.tile_size = ( int(self.root_attrib["tilewidth"]), int(self.root_attrib["tileheight"]) )
+        self.tile_size = (
+            int(self.root.attrib["tilewidth"]),
+            int(self.root.attrib["tileheight"])
+        )
+
+        # Trim out editor settings
+        [self.root.remove(element) for element in self.root if element.tag == "editorsettings"]
 
         # Grab properties
-        self.name = None
-        self.mode = None
+        properties_element = self.root.find("properties")
+        if properties_element == None:
+            throw(f"No properties found in Tilemap \"{self.file_name}\"")
 
-        if self.root[0].tag == "properties":
-            properties = [property.attrib for property in self.root[0]]
-            for property in properties:
-                match property.get("name"):
-                    case "hva:name":
-                        self.name = property["value"]
-                    case "hva:mode":
-                        self.mode = property["value"]
-                    case _:
-                        pass
+        self.properties = {property.attrib["name"]: property.attrib["value"] for property in properties_element}
 
-        if self.name == None:
-            throw(f"Property hva:name not provided in Tilemap \"{self.filepath[1]}\"")
-
-        if self.mode == None:
+        if not self.properties.get("hva:mode"):
             throw(f"Property hva:mode not provided in Tilemap \"{self.filepath[1]}\"")
-
-        tag_index = 1
+        self.mode = self.properties["hva:mode"]
+        
+        if not self.properties.get("hva:name"):
+            throw(f"Property hva:name not provided in Tilemap \"{self.filepath[1]}\"")
+        self.name = self.properties["hva:name"]
 
         # Grab tilesets
-        self.tileset_list = {}
-        while self.root[tag_index].tag == "tileset": 
-            tilemap_set = self.root[tag_index]
+        self.tileset_list = []
+        for tilemap_set in self.root.findall("tileset"): 
 
             # Create Tileset
             try:
@@ -103,16 +95,16 @@ class Tilemap:
 
             except FileTypeError as error:
                 throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" must be .tsx format")
-                
-            tileset_data = (tileset, int(tilemap_set.attrib["firstgid"]))
-            self.tileset_list[tag_index] = tileset_data
-
-            tag_index += 1
+  
+            tileset_data = (
+                 tileset,
+                 sum([tileset.tile_count for tileset in self.tileset_list])
+            )
+            self.tileset_list.append(tileset_data)
 
         # Grab layers
         self.layers = []
-        while tag_index < len(self.root) and self.root[tag_index].tag == "layer":
-            layer = self.root[tag_index]
+        for layer in self.root.findall("layer"):
 
             # Convert each tile to an int
             layer_data = []
@@ -137,33 +129,23 @@ class Tilemap:
                     # Convert to byte
                     tile_byte = (32 - len( f"{tile:b}" )) * "0" + f"{tile:b}"
 
-                    # Extract rotation flag
                     tiled_to_godot_flags = {"000":"000", "101":"-011", "110":"011", "011":"-010", "100":"001", "111":"-001", "010":"010", "001":"-100"}
+                    # Split tile
                     rotation_value = int( tiled_to_godot_flags[tile_byte[0:3]] + "0" * 29, 2 )
-
-                    # Extract tile value
                     tile_value = int( tile_byte[3:], 2)
 
                     # For each tileset in the layer
-                    for tileset_id, tileset in self.tileset_list.items():
-                        # Grab global starting tile ID
-                        first_gid = sum([self.tileset_list[set_id][0].tile_count for set_id in self.tileset_list if set_id < tileset_id])
-
-                        # Check if tile is in id range
-                        if tile_value in range( tileset[1], tileset[1] + tileset[0].tile_count ):
-                            # Tile ID, offset by global starting ID, offset by original tileset tile ID
-                            global_tile = rotation_value + 1 + tile_value + first_gid - tileset[1]
+                    for tileset_id, (tileset, firstgid) in enumerate(self.tileset_list):
+                        if tile_value in range( firstgid, firstgid + tileset.tile_count ):
+                            global_tile = rotation_value + tile_value + firstgid
                             break
-                        else:
-                            # Blank tile / tile not included in the set
-                            global_tile = 0
+                        global_tile = 0
 
                     row_data.append(global_tile)
                 layer_data.append(row_data)
-
             self.layers.append((layer.attrib['name'], layer_data))
 
-            tag_index += 1
+        # TODO OBJECT LAYERS
     
     def _generate(self) -> tuple:
         # Generate tres first
@@ -199,9 +181,6 @@ class Tilemap:
             
             # Write to tres
             tscn += ", ".join(flat_layer)+")"
-                    
-
-        #print(tscn)
 
         # Write tscn
         return tscn, tres, [self.tileset_list[set][0].full_image_path for set in self.tileset_list]
@@ -229,83 +208,49 @@ class Tileset:
         # Load file
         self.tree = element_tree.parse(filepath)
         self.root = self.tree.getroot()
-        self.root_attrib = self.root.attrib
-        self.name = self.root_attrib["name"]
+        self.name = self.root.attrib["name"]
 
-        # Trim out editor settings
-        if self.root[0].tag == "editorsettings":
-            self.root = self.root[1:]
+        # Trim out unwanted elements
+        [self.root.remove(element) for element in self.root if element.tag in ["editorsettings", "grid"]]
 
-        # Trim out grid? what is this even
-        if self.root[0].tag == "grid":
-            self.root[0:] = self.root[1:]
-
-        # Grab tile size
-        self.tile_size = ( int(self.root_attrib["tilewidth"]), int(self.root_attrib["tileheight"]) )
-        
-        # Grab columns
-        self.columns = int(self.root_attrib["columns"])
+        # Grab primary root attributes
+        self.tile_size = (int(self.root.attrib["tilewidth"]), int(self.root.attrib["tileheight"]))
+        self.tile_count =  int (self.root.attrib["tilecount"])
+        self.columns = int(self.root.attrib["columns"])
 
         # Grab properties
-        self.tile_count = None
+        properties_element = self.root.find("properties")
+        if properties_element != None:
+            self.properties = {property.attrib["name"]: property.attrib["value"] for property in properties_element}
 
-        if self.root[0].tag == "properties":
-            properties = [property.attrib for property in self.root[0]]
-            for property in properties:
-                match property.get("name"):
-                    case "hva:tiles":
-                        try:
-                            self.tile_count = int(property["value"])
-                        except ValueError:
-                            throw(f"Property hva:tiles in Tileset \"{self.name}\" must be type int")
-                    case _:
-                        pass
-
-        if self.tile_count == None:
-            cprint(f"[/] Property hva:name not provided in Tileset \"{self.name}\", defaulting to Tiled value", "yellow")
-            self.tile_count = int(self.root_attrib["tilecount"])
-            
-        self.root[0:] = self.root[1:]
-                        
+            if self.properties.get("hva:tiles"):
+                try:
+                    self.tile_count = int(self.properties["hva:tiles"])
+                except ValueError:
+                    throw(f"Property \"hva:tiles\" in Tileset \"{self.name}\" must be a number")                        
 
         # Grab image
-        self.full_image_path = normpath(self.root[0].attrib["source"])
-        self.image_path = normpath(split(self.root[0].attrib["source"])[1])
-
-        self.root[0:] = self.root[1:]
+        self.image_path = self.root.find("image").attrib["source"]
+        self.full_image_path = normpath(self.image_path)
+        self.image = normpath(split(self.image_path)[1])
 
         # Grab shapes
         self.shapes = []
         self.object_id = 0
-        for tile in self.root[0:]:
+        for tile in self.root.findall("tile"):
             # TODO deal with concave objects
-            if tile[0].tag != "objectgroup":
+            objectgroup = tile.find("objectgroup")
+            if not objectgroup:
                 continue
 
-            for object in tile[0]:
-                points = []
+            for object in objectgroup:
                 self.object_id += 1
-
-                # Check if square or not
-                if "width" in object.attrib:
-                    x = object.attrib["x"]
-                    y = object.attrib["y"]
-                    width = object.attrib["width"]
-                    height = object.attrib["height"]
-                    points = [ (x, y), (x, width), (height, width), (height, y) ]
-                    self.shapes.append((
-                        int(tile.attrib["id"]), self.object_id, points
-                    ))
-
-                elif len(object) > 0:
-                    # Grab point
-                    for point in object[0].attrib["points"].split(" "):
-                        x = max(0, min(int(point.split(",")[0]) + int(object.attrib["x"]), self.tile_size[0]))
-                        y = max(0, min(int(point.split(",")[1]) + int(object.attrib["y"]), self.tile_size[1]))
-                        points.append((x, y))
-                    self.shapes.append((
-                        int(tile.attrib["id"]), self.object_id, points
-                    ))
+                points = []
+                print(object)
+                # Store shape
+                self.shapes.append((
+                    int(tile.attrib["id"]), self.object_id, points
+                ))
 
     @property
     def _valid(self) -> bool:
@@ -327,7 +272,7 @@ class Tileset:
 
             # Add set image to tres
             ext_resource_id += 1
-            tres += f"[ext_resource path=\"{set.image_path}\" type=\"Texture\" id={ext_resource_id}]\n\n"
+            tres += f"[ext_resource path=\"{set.image}\" type=\"Texture\" id={ext_resource_id}]\n\n"
 
             # Object collision step
             for shapes in set.shapes:
@@ -395,6 +340,33 @@ class Tileset:
         tres = f"[gd_resource type=\"TileSet\" load_steps={ext_resource_id+sub_resource_id+1} format=2]\n\n" + tres
 
         return tres
+
+############
+### UTIL ###
+############
+class TiledUtil:
+    @staticmethod
+    def object_to_points(object:element_tree.Element) -> list:
+        points = []
+
+        if "width" in object.attrib:
+            x = int(object.attrib["x"])
+            y = int(object.attrib["y"])
+            width = int(object.attrib["width"])
+            height = int(object.attrib["height"])
+            points = [ (0, 0), (0, width - x), (height - y, width - x), (height - y, 0) ]
+
+        elif len(object) > 0:
+            if not object.find("polygon"):
+                return []
+                
+            for point in object[0].attrib["points"].split(" "):
+                points.append(
+                    int(point.split(",")[0]) + int(object.attrib["x"]),
+                    int(point.split(",")[1]) + int(object.attrib["y"])
+                )
+
+        return points
 
 ###########
 ### RUN ###
