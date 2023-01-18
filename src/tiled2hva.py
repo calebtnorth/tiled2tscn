@@ -272,10 +272,12 @@ class Tileset:
         self.full_image_path = normpath(self.root[0].attrib["source"])
         self.image_path = normpath(split(self.root[0].attrib["source"])[1])
 
+        self.root[0:] = self.root[1:]
+
         # Grab shapes
         self.shapes = []
         self.object_id = 0
-        for tile in self.root[2:]:
+        for tile in self.root[0:]:
             # TODO deal with concave objects
             if tile[0].tag != "objectgroup":
                 continue
