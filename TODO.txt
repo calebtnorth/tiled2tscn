@@ -1,0 +1,6 @@
+- deal with concave shapes
+- add information
+    - tile counts
+    - playable Area
+    - total size
+- plan UI
