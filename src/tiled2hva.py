@@ -95,12 +95,14 @@ class Tilemap:
 
             except FileTypeError as error:
                 throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" must be .tsx format")
-  
-            tileset_data = (
-                 tileset,
-                 sum([tileset.tile_count for tileset in self.tileset_list])
-            )
-            self.tileset_list.append(tileset_data)
+
+            else:
+                self.tileset_list.append((
+                    tileset,
+                    int( tilemap_set.attrib["firstgid"] ),
+                    # optimized firstgid relative to user-defined tilecount
+                    sum([tileset.tile_count for tileset, fg, ofg in self.tileset_list]),
+                ))
 
         # Grab layers
         self.layers = []
@@ -110,14 +112,15 @@ class Tilemap:
             layer_data = []
 
             # Strip out all unnecessary tags
-            while layer[0].tag != "data":
-                layer[0:] = layer[1:]
+            if layer.find("data") == None:
+                continue
+            xml_layer_data = layer.find("data")
 
-            if layer[0].attrib.get("encoding") != "csv":
+            if xml_layer_data.attrib.get("encoding") != "csv":
                 throw("Tilemaps must be encoded in csv format!")
 
             # For each row in the layer
-            for row in layer[0].text.strip().split("\n"):
+            for row in xml_layer_data.text.strip().split("\n"):
                 row_data = []
                 # For each tile in the layer
                 for tile in row.split(","):
@@ -134,10 +137,14 @@ class Tilemap:
                     rotation_value = int( tiled_to_godot_flags[tile_byte[0:3]] + "0" * 29, 2 )
                     tile_value = int( tile_byte[3:], 2)
 
-                    # For each tileset in the layer
-                    for tileset_id, (tileset, firstgid) in enumerate(self.tileset_list):
+                    # Find tile id relative to tileset via firstgid, convert to global id
+                    for tileset, firstgid, optimized_firstgid in self.tileset_list:
                         if tile_value in range( firstgid, firstgid + tileset.tile_count ):
-                            global_tile = rotation_value + tile_value + firstgid
+                            # original value - firstgid to get tile without tileset
+                            # addition of 1 to includes tile lost when subtracting tile_value ... id 10 - firstgid 5 = 5 left, when 6 is correct because id 5 is included
+                            # add optimized_firstgid to restore set position, and add rotation into tile value
+                            global_tile = tile_value - firstgid + 1 + optimized_firstgid + rotation_value
+                            print(firstgid, tile_value, global_tile)
                             break
                         global_tile = 0
 
@@ -149,7 +156,7 @@ class Tilemap:
     
     def _generate(self) -> tuple:
         # Generate tres first
-        tres = Tileset._generate_tres([tileset for tileset, firstgid in self.tileset_list])
+        tres = Tileset._generate_tres([tileset for tileset, fg, ofg in self.tileset_list])
 
         # Generate tscn
         tscn = "[gd_scene load_steps=2 format=2]\n\n"
@@ -175,7 +182,7 @@ class Tilemap:
                     tile = row[tile_id]
                     if tile != 0:
                         flat_layer.append(f"{ tile_id + (row_id * 65536) }, {tile}, 0")
-                    
+
                     tile_id += 1
                 row_id += 1
             
@@ -183,7 +190,7 @@ class Tilemap:
             tscn += ", ".join(flat_layer)+")"
 
         # Write tscn
-        return tscn, tres, [tileset.full_image_path for tileset, firstgid in self.tileset_list]
+        return tscn, tres, [tileset.full_image_path for tileset, fg, ofg in self.tileset_list]
 
     @property
     def _valid(self) -> bool:
@@ -215,7 +222,7 @@ class Tileset:
 
         # Grab primary root attributes
         self.tile_size = (int(self.root.attrib["tilewidth"]), int(self.root.attrib["tileheight"]))
-        self.tile_count =  int (self.root.attrib["tilecount"])
+        self.tile_count = int(self.root.attrib["tilecount"])
         self.columns = int(self.root.attrib["columns"])
 
         # Grab properties
@@ -290,9 +297,8 @@ class Tileset:
         # Tile step
         total_tiles = 0
         tres += "[resource]\n"
-        for set_id in range(0, len(sets)):
-            set = sets[set_id]
-            for set_tile_id in range(0, set.tile_count+1):
+        for set_id, set in enumerate(sets):
+            for set_tile_id in range(0, set.tile_count):
                 tile_id = total_tiles + 1
 
                 # Grab tile region
@@ -331,7 +337,6 @@ class Tileset:
                     f"{s}shape_one_way_margin = 0.0\n"+\
                     f"{s}shapes = [ {tile_shapes} ]\n"+\
                     f"{s}z_index = 0\n"
-
                 total_tiles += 1
 
         tres = f"[gd_resource type=\"TileSet\" load_steps={ext_resource_id+sub_resource_id+1} format=2]\n\n" + tres
