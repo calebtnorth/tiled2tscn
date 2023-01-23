@@ -144,7 +144,6 @@ class Tilemap:
                             # addition of 1 to includes tile lost when subtracting tile_value ... id 10 - firstgid 5 = 5 left, when 6 is correct because id 5 is included
                             # add optimized_firstgid to restore set position, and add rotation into tile value
                             global_tile = tile_value - firstgid + 1 + optimized_firstgid + rotation_value
-                            print(firstgid, tile_value, global_tile)
                             break
                         global_tile = 0
 
@@ -268,15 +267,13 @@ class Tileset:
         ext_resource_id = 0
         sub_resource_id = 0
 
+        # Add set image to tres
+        for set_id in range(0, len(sets)):
+            ext_resource_id += 1
+            tres += f"[ext_resource path=\"{sets[set_id].image}\" type=\"Texture\" id={ext_resource_id}]\n\n"
+
         for set_id in range(0, len(sets)):
             set = sets[set_id]
-            # Check passed object type
-            if type(set) != Tileset:
-                raise TypeError("Cannot pass anything other than a Tileset")
-
-            # Add set image to tres
-            ext_resource_id += 1
-            tres += f"[ext_resource path=\"{set.image}\" type=\"Texture\" id={ext_resource_id}]\n\n"
 
             # Object collision step
             for shapes in set.shapes:
@@ -359,14 +356,14 @@ class TiledUtil:
             points = [ (0, 0), (0, width - x), (height - y, width - x), (height - y, 0) ]
 
         elif len(object) > 0:
-            if not object.find("polygon"):
+            if object.find("polygon") == None:
                 return []
 
             for point in object[0].attrib["points"].split(" "):
-                points.append(
+                points.append((
                     int(point.split(",")[0]) + int(object.attrib["x"]),
                     int(point.split(",")[1]) + int(object.attrib["y"])
-                )
+                ))
 
         return points
 
