@@ -1,5 +1,5 @@
-# tiled2hva
-# A tool to convert Tiled .tmx files to Godot .tscn for High Velocity Arena 
+# tiled2hva API
+# Converts Tiled .tmx files to Godot .tscn for High Velocity Arena 
 
 # Copyright (c) 2023 Caleb North
 
@@ -21,19 +21,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-###############
-### IMPORTS ###
-###############
 import xml.etree.ElementTree as element_tree
-import argparse
-import colorama
-
-from os.path import join, split, normpath, exists, abspath
-from os import makedirs, listdir, remove
-from sys import exit
-
-from shutil import copy
-from termcolor import cprint
+from os.path import join, split, normpath, exists
 
 ###############
 ### TILEMAP ###
@@ -72,7 +61,7 @@ class Tilemap:
         if properties_element == None:
             throw(f"No properties found in Tilemap \"{self.file_name}\"")
 
-        self.properties = {property.attrib["name"]: property.attrib["value"] for property in properties_element}
+        self.properties = {property.attrib["name"]: property.attrib["value"] for property in properties_element} #type:ignore
 
         if not self.properties.get("hva:mode"):
             throw(f"Property hva:mode not provided in Tilemap \"{self.filepath[1]}\"")
@@ -87,22 +76,14 @@ class Tilemap:
         for tilemap_set in self.root.findall("tileset"): 
 
             # Create Tileset
-            try:
-                tileset = Tileset(join(self.filepath[0], tilemap_set.attrib["source"]))
-            
-            except FileNotFoundError as error:
-                throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" cannot be found")
+            tileset = Tileset(join(self.filepath[0], tilemap_set.attrib["source"]))
 
-            except FileTypeError as error:
-                throw(f"Tileset file \"{split(error.args[0])[1]}\" in Tilemap \"{self.file_name}\" must be .tsx format")
-
-            else:
-                self.tileset_list.append((
-                    tileset,
-                    int( tilemap_set.attrib["firstgid"] ),
-                    # optimized firstgid relative to user-defined tilecount
-                    sum([tileset.tile_count for tileset, fg, ofg in self.tileset_list]),
-                ))
+            self.tileset_list.append((
+                tileset,
+                int( tilemap_set.attrib["firstgid"] ),
+                # optimized firstgid relative to user-defined tilecount
+                sum([tileset.tile_count for tileset, fg, ofg in self.tileset_list]),
+            ))
 
         # Grab layers
         self.layers = []
@@ -116,11 +97,11 @@ class Tilemap:
                 continue
             xml_layer_data = layer.find("data")
 
-            if xml_layer_data.attrib.get("encoding") != "csv":
+            if xml_layer_data.attrib.get("encoding") != "csv":  #type:ignore
                 throw("Tilemaps must be encoded in csv format!")
 
             # For each row in the layer
-            for row in xml_layer_data.text.strip().split("\n"):
+            for row in xml_layer_data.text.strip().split("\n"):  #type:ignore
                 row_data = []
                 # For each tile in the layer
                 for tile in row.split(","):
@@ -147,7 +128,7 @@ class Tilemap:
                             break
                         global_tile = 0
 
-                    row_data.append(global_tile)
+                    row_data.append(global_tile)  #type:ignore
                 layer_data.append(row_data)
             self.layers.append((layer.attrib['name'], layer_data))
 
@@ -196,7 +177,7 @@ class Tileset:
                     throw(f"Property \"hva:tiles\" in Tileset \"{self.name}\" must be a number")                        
 
         # Grab image
-        self.image_path = self.root.find("image").attrib["source"]
+        self.image_path = self.root.find("image").attrib["source"]  #type:ignore
         self.full_image_path = normpath(self.image_path)
         self.image = normpath(split(self.image_path)[1])
 
@@ -254,11 +235,11 @@ class TiledUtil:
 ##################
 ### GENERATION ###
 ##################
-class Generate:
+class Convert:
     """
     Generates necessary files from given filepath
     """
-    def __init__(self, filepath):
+    def __init__(self, filepath:str) -> None:
         """
         Generates map file, tileset file, and image paths into instance variables
         """
@@ -317,7 +298,7 @@ class Generate:
 
                 if tile_objects.get(tile_object_key) != None:
                     has_collision = True
-                    for shape in tile_objects.get(tile_object_key):
+                    for shape in tile_objects.get(tile_object_key):  #type:ignore
                         tile_shapes += "{\n"+\
                             '"autotile_coord": Vector2( 0, 0 ),\n'+\
                             '"one_way": false,\n'+\
@@ -382,7 +363,7 @@ class Generate:
 ############
 ### KILL ###
 ############
-def throw(msg:str=None) -> None:
+def throw(msg:str=None) -> None:  #type:ignore
     raise(ConversionError(msg))
 
 ##############
