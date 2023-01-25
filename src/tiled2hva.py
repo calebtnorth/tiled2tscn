@@ -1,5 +1,5 @@
 # tiled2hva
-# A CLI tool to convert Tiled .tmx files to Godot .tscn for High Velocity Arena 
+# A tool to convert Tiled .tmx files to Godot .tscn for High Velocity Arena 
 
 # Copyright (c) 2023 Caleb North
 
@@ -45,11 +45,11 @@ class Tilemap:
         self.file_name = split(self.filepath)[1]
 
         # Check if file exists
-        if not self._valid:
-            throw("Tileset file cannot be found")
+        if not exists(self.filepath):
+            throw("Tilemap file cannot be found")
         # Check filetype
         if not self.filepath.endswith('.tmx'):
-            throw("Tileset file must be .tmx format")
+            throw("Tilemap file must be .tmx format")
             
         # Parse filepath
         self.filepath = split(self.filepath)
@@ -83,7 +83,7 @@ class Tilemap:
         self.name = self.properties["hva:name"]
 
         # Grab tilesets
-        self.tileset_list = []
+        self.tileset_list:list = []
         for tilemap_set in self.root.findall("tileset"): 
 
             # Create Tileset
@@ -151,49 +151,10 @@ class Tilemap:
                 layer_data.append(row_data)
             self.layers.append((layer.attrib['name'], layer_data))
 
-        # TODO OBJECT LAYERS
-    
-    def _generate(self) -> tuple:
-        # Generate tres first
-        tres = Tileset._generate_tres([tileset for tileset, fg, ofg in self.tileset_list])
-
-        # Generate tscn
-        tscn = "[gd_scene load_steps=2 format=2]\n\n"
-
-        # Save image path
-        tscn += f'[ext_resource path="{self.mode.lower() + "_" + self.name.lower()+".tres"}" type="TileSet" id=1]\n\n'
-
-        # Create parent node
-        tscn += f'[node name="{self.mode + "_" + self.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n'
-
-        # Write each layer
-        for layer in self.layers:
-            tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n'
-            tscn += f'cell_size = Vector2( {self.tile_size[0]}, {self.tile_size[1]} )\ncell_custom_transform = Transform2D( 16, 0, 0, 16, 0, 0 )\nformat = 1\ntile_data = PoolIntArray('
-            flat_layer = []
-            
-            # Flatten layer array
-            row_id = 0
-            while row_id < len(layer[1]):
-                row = layer[1][row_id]
-                tile_id = 0
-                while tile_id < len(row):
-                    tile = row[tile_id]
-                    if tile != 0:
-                        flat_layer.append(f"{ tile_id + (row_id * 65536) }, {tile}, 0")
-
-                    tile_id += 1
-                row_id += 1
-            
-            # Write to tres
-            tscn += ", ".join(flat_layer)+")"
-
-        # Write tscn
-        return tscn, tres, [tileset.full_image_path for tileset, fg, ofg in self.tileset_list]
-
-    @property
-    def _valid(self) -> bool:
-        return exists(self.filepath)
+        # Grab object layers
+        self.objects = []
+        for layer in self.root.findall("objectgroup"):
+            pass
 
 ###############
 ### TILESET ###
@@ -204,12 +165,11 @@ class Tileset:
         self.filepath = filepath
 
         # Check if file exists
-        if not self._valid:
-            raise FileNotFoundError(filepath)
-
+        if not exists(self.filepath):
+            throw("Tileset file cannot be found")
         # Check filetype
         if not self.filepath.endswith('.tsx'):
-            raise FileTypeError(filepath)
+            throw("Tileset file must be .tsx format")
 
         # Load file
         self.tree = element_tree.parse(filepath)
@@ -251,19 +211,66 @@ class Tileset:
 
             for object in objectgroup:
                 self.object_id += 1
-                self.shapes.append((
-                    int(tile.attrib["id"]), self.object_id, TiledUtil.object_to_points(object)
-                ))
 
-    @property
-    def _valid(self) -> bool:
-        return exists(self.filepath)
-    
+                x = int(object.attrib["x"])
+                y = int(object.attrib["y"])
+
+                if "width" in object.attrib:
+                    points = TiledUtil.square_to_points(x, y, object.attrib)
+                else:
+                    points = TiledUtil.object_to_points(x, y, object[0].attrib["points"])
+
+                self.shapes.append((int(tile.attrib["id"]), self.object_id, points))
+
+############
+### UTIL ###
+############
+class TiledUtil:
+    """
+    Basic utility for interal usage
+    """
     @staticmethod
-    def _generate_tres(sets) -> str:
-        tres = ""
+    def square_to_points(x:int, y:int, square:dict[str, str]) -> list[tuple]:
+        """
+        Converts a square Tiled object to a list of four points
+        """
+        width = int(square["width"])
+        height = int(square["height"])
+        return [ (0, 0), (0, width - x), (height - y, width - x), (height - y, 0) ]
 
+    @staticmethod
+    def object_to_points(x:int, y:int, points_str:str) -> list[tuple]:
+        """
+        Converts a Tiled object to a list of points
+        """
+        points = []
+        for point in points_str.split(" "):
+            points.append((
+                int(point.split(",")[0]) + x,
+                int(point.split(",")[1]) + y
+            ))
+        return points
+
+##################
+### GENERATION ###
+##################
+class tiled2hva:
+    """
+    Generates necessary files from given filepath
+    """
+    def __init__(self, filepath):
+        """
+        Generates map file, tileset file, and image paths into instance variables
+        """
+        # Create Tilemap object
+        tilemap = Tilemap(filepath)
+
+        # Generate tres first
+        sets = [tileset[0] for tileset in tilemap.tileset_list]
+        
+        tres = ""
         tile_objects = {}
+
         ext_resource_id = 0
         sub_resource_id = 0
 
@@ -272,10 +279,8 @@ class Tileset:
             ext_resource_id += 1
             tres += f"[ext_resource path=\"{sets[set_id].image}\" type=\"Texture\" id={ext_resource_id}]\n\n"
 
-        for set_id in range(0, len(sets)):
-            set = sets[set_id]
-
-            # Object collision step
+        # Object collision step
+        for set_id, set in enumerate(sets):
             for shapes in set.shapes:
                 sub_resource_id += 1
                 points_list = []
@@ -283,6 +288,7 @@ class Tileset:
                 for points in shapes[2]:
                     points_list.append(str(points[0]))
                     points_list.append(str(points[1]))
+
                 tres += f"[sub_resource type=\"ConvexPolygonShape2D\" id={sub_resource_id}]\n"
                 tres += f"points = PoolVector2Array( { ', '.join(points_list) } )\n\n"
                 
@@ -292,8 +298,8 @@ class Tileset:
                     tile_objects[(set_id, shapes[0])] = [sub_resource_id]
 
         # Tile step
-        total_tiles = 0
         tres += "[resource]\n"
+        total_tiles = 0
         for set_id, set in enumerate(sets):
             for set_tile_id in range(0, set.tile_count):
                 tile_id = total_tiles + 1
@@ -308,6 +314,7 @@ class Tileset:
                 tile_object_key = (set_id, set_tile_id)
                 has_collision = False
                 tile_shapes = ""
+
                 if tile_objects.get(tile_object_key) != None:
                     has_collision = True
                     for shape in tile_objects.get(tile_object_key):
@@ -317,6 +324,7 @@ class Tileset:
                             '"one_way_margin": 1.0,\n'+\
                            f'"shape":SubResource( {shape} ),\n'+\
                             '"shape_transform": Transform2D( 1, 0, 0, 1, 0, 0 )}, \n'
+
                 s = f"{tile_id}/"
                 tres += \
                     f"{s}name = \"{tile_id}\"\n"+\
@@ -334,124 +342,60 @@ class Tileset:
                     f"{s}shape_one_way_margin = 0.0\n"+\
                     f"{s}shapes = [ {tile_shapes} ]\n"+\
                     f"{s}z_index = 0\n"
+
                 total_tiles += 1
 
-        tres = f"[gd_resource type=\"TileSet\" load_steps={ext_resource_id+sub_resource_id+1} format=2]\n\n" + tres
+        tres = \
+            f"[gd_resource type=\"TileSet\" load_steps={ext_resource_id+sub_resource_id+1} format=2]\n\n{tres}"
 
-        return tres
+        # Generate tscn
+        tscn = "[gd_scene load_steps=2 format=2]\n\n"
+        tscn += f'[ext_resource path="{tilemap.mode.lower() + "_" + tilemap.name.lower()+".tres"}" type="TileSet" id=1]\n\n'
+        tscn += f'[node name="{tilemap.mode + "_" + tilemap.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n'
 
-############
-### UTIL ###
-############
-class TiledUtil:
-    @staticmethod
-    def object_to_points(object:element_tree.Element) -> list:
-        points = []
+        # Write each layer
+        for layer in tilemap.layers:
+            tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n'
+            tscn += f'cell_size = Vector2( {tilemap.tile_size[0]}, {tilemap.tile_size[1]} )\ncell_custom_transform = Transform2D( 16, 0, 0, 16, 0, 0 )\nformat = 1\ntile_data = PoolIntArray('
+            flat_layer = []
+            
+            # Flatten layer array
+            row_id = 0
+            while row_id < len(layer[1]):
+                row = layer[1][row_id]
+                tile_id = 0
+                while tile_id < len(row):
+                    tile = row[tile_id]
+                    if tile != 0:
+                        flat_layer.append(f"{ tile_id + (row_id * 65536) }, {tile}, 0")
+                    tile_id += 1
+                row_id += 1
+            
+            # Write to tres
+            tscn += ", ".join(flat_layer)+")\n"
 
-        if "width" in object.attrib:
-            x = int(object.attrib["x"])
-            y = int(object.attrib["y"])
-            width = int(object.attrib["width"])
-            height = int(object.attrib["height"])
-            points = [ (0, 0), (0, width - x), (height - y, width - x), (height - y, 0) ]
-
-        elif len(object) > 0:
-            if object.find("polygon") == None:
-                return []
-
-            for point in object[0].attrib["points"].split(" "):
-                points.append((
-                    int(point.split(",")[0]) + int(object.attrib["x"]),
-                    int(point.split(",")[1]) + int(object.attrib["y"])
-                ))
-
-        return points
-
-###########
-### RUN ###
-###########
-def main():
-    colorama.init()
-    # Create argument parser
-    parser = argparse.ArgumentParser(
-        prog = "tiled2hva",
-        description =  "Converts Tiled .tmx files to Godot .tscn for High Velocity Arena",
-    )
-    parser.add_argument('filepath', type=str)
-    args = parser.parse_args()
-
-    # Grab filepath
-    tscn_filepath = abspath(normpath(args.filepath))
-
-    # Create Tilemap
-    tilemap = Tilemap(tscn_filepath)
-    map = tilemap._generate()
-
-    # Filepath / name combinations
-    map_name = tilemap.mode + "_" + tilemap.name
-    folder_path = split(tscn_filepath)[0]
-    full_folder_path = join(folder_path, map_name)
-
-    # Try to make folder at location
-    if not exists(full_folder_path):
-        makedirs(full_folder_path)
-        cprint(f"[+] Created {map_name} folder at {folder_path}", "green")
-    # Folder exists, try wiping
-    else:
-        cprint(f"[?] The destination subfolder /{map_name} already exists. Wipe all contents to proceed? (y/n)", "light_yellow", end="")
-        response = input(" ") 
-        if response != "y":
-            throw()
-
-        # Gut folder
-        for file in listdir(full_folder_path):
-            remove(join(full_folder_path, file))
-
-    copied_files = 0
-    # Move images
-    for image in map[2]:
-        copy(join(folder_path, image), full_folder_path)
-        copied_files += 1
-
-    # Write .tres
-    with open(join(full_folder_path, f"{map_name}.tres"), "w") as file:
-        file.write(map[1])
-
-    with open(join(full_folder_path, f"{map_name}.tscn"), "w") as file:
-        file.write(map[0])
-
-    cprint(f"[+] Map {map_name} written to {full_folder_path}", "green")
-
-
-##############
-### ERRORS ###
-##############
-class FileTypeError(Exception):
-    "Raised when file type differs from expected"
-    pass
-
-###############
-### LOGGING ###
-###############
-def log(msg):
-    print(msg)
+        # Save data
+        self.tscn   = tscn
+        self.tres   = tres
+        self.images = [tileset[0].full_image_path for tileset in tilemap.tileset_list]
 
 ############
 ### KILL ###
 ############
 def throw(msg:str=None) -> None:
-    if msg == None:
-        cprint("[-] Process killed", "red")
-    else:
-        cprint(f"[-] {msg}", "red")
-    exit(1)
+    raise(ConversionError(msg))
 
-###########
-### RUN ###
-###########
-if __name__ == "__main__":
+##############
+### ERRORS ###
+##############
+class ConversionError(Exception):
+    "Raised when conversion issue occurs"
+    pass
+
+if __name__=="__main__":
     try:
-        main()
-    except KeyboardInterrupt:
-        throw()
-    exit(0)
+        t=tiled2hva(r'C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx')
+    except ConversionError as ce:
+        print(ce)
+    else:
+        print(t.tscn)
