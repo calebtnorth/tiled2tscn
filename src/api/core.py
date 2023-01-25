@@ -254,7 +254,7 @@ class TiledUtil:
 ##################
 ### GENERATION ###
 ##################
-class tiled2hva:
+class Generate:
     """
     Generates necessary files from given filepath
     """
@@ -391,11 +391,3 @@ def throw(msg:str=None) -> None:
 class ConversionError(Exception):
     "Raised when conversion issue occurs"
     pass
-
-if __name__=="__main__":
-    try:
-        t=tiled2hva(r'C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx')
-    except ConversionError as ce:
-        print(ce)
-    else:
-        print(t.tscn)
