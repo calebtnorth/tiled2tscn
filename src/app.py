@@ -47,9 +47,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("tiled2hva")
+        self.show()
 
 if __name__ == "__main__":
     app = Application(sys.argv)
-    MainWindow()
-    mw.show()
+    main_window = MainWindow()
     app.exec()
