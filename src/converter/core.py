@@ -356,6 +356,12 @@ class Convert:
             tscn += ", ".join(flat_layer)+")\n"
 
         # Save data
+        self.name        = tilemap.name
+        self.mode        = tilemap.mode
+        self.tile_size   = tilemap.tile_size
+        self.layers      = len(tilemap.layers)
+        self.objects     = len(tilemap.objects)
+
         self.tscn   = tscn
         self.tres   = tres
         self.images = [tileset[0].full_image_path for tileset in tilemap.tileset_list]
