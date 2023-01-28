@@ -135,7 +135,25 @@ class Tilemap:
         # Grab object layers
         self.objects = []
         for layer in self.root.findall("objectgroup"):
-            pass
+            for object in layer:
+                # Skip if no properties are provided
+                if not object.find("properties"):
+                    continue
+
+                # Grab properties
+                property = {property.attrib["name"]: property.attrib["value"] for property in object.find("properties")}
+
+                # Grab points
+                x = int(object.attrib["x"])
+                y = int(object.attrib["y"])
+                if object.attrib.get("width"):
+                    points = TiledUtil.square_to_points(x, y, object.attrib)
+                else:
+                    points = TiledUtil.object_to_points(x, y, object.find("polygon").attrib["points"])
+                print(points)
+                
+                
+
 
 ###############
 ### TILESET ###
@@ -217,7 +235,7 @@ class TiledUtil:
         """
         width = int(square["width"])
         height = int(square["height"])
-        return [ (0, 0), (0, width - x), (height - y, width - x), (height - y, 0) ]
+        return [ (x, y), (x + width, y), (x + width, height + y), (0, height + y) ]
 
     @staticmethod
     def object_to_points(x:int, y:int, points_str:str) -> list[tuple]:
@@ -235,6 +253,16 @@ class TiledUtil:
 ##################
 ### GENERATION ###
 ##################
+# [node name="Node" type="Node2D" parent="."]
+
+# [node name="Area2D" type="Area2D" parent="Node"]
+
+# [node name="CollisionShape2D" type="CollisionPolygon2D" parent="Node/Area2D"]
+# polygon = PoolVector2Array( 0, 0, 0, 0, 0, 0, 0, 0 )
+# __meta__ = {
+# "team": "offense",
+# "type": "zone"
+# }
 class Convert:
     """
     Generates necessary files from given filepath
@@ -378,3 +406,7 @@ def throw(msg:str=None) -> None:  #type:ignore
 class ConversionError(Exception):
     "Raised when conversion issue occurs"
     pass
+
+if __name__ == "__main__":
+    c = Convert("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft.tmx")
+    #print(c.tscn[:1000])
