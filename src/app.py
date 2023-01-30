@@ -119,9 +119,6 @@ class MainWindow(QMainWindow):
         converter = Convert(self.selected_file_path)
         self.tilemap_name.setText(f"Name: {converter.name}")
         self.tilemap_mode.setText(f"Mode: {converter.mode}")
-        self.tilemap_tile_size.setText(f"Tile size: {converter.tile_size[0]} x {converter.tile_size[1]}")
-        self.tilemap_layers.setText(f"{converter.layers} Layers")
-        self.tilemap_objects.setText(f"{converter.objects} Objects")
 
 ###########
 ### RUN ###
