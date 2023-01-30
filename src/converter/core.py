@@ -352,22 +352,6 @@ class Convert:
         tscn += f'[ext_resource path="{tilemap.mode.lower() + "_" + tilemap.name.lower()+".tres"}" type="TileSet" id=1]\n\n'
         tscn += f'[node name="{tilemap.mode + "_" + tilemap.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n'
 
-        # Object step
-        tscn += "[node name=\"Objects\" type=\"Node2D\" parent=\".\"]\nscale = Vector2( 0.25, 0.25 )\n\n"
-
-        for object_id, object in enumerate(tilemap.objects):
-            tscn += f"[node name=\"Object{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n\n"
-            tscn += f"[node name=\"CollisionShape\" type=\"CollisionPolygon2D\" parent=\"Objects/Object{object_id}\"]\n"
-
-            points_list = []
-            for points in object[0]:
-                points_list.append(str(points[0]))
-                points_list.append(str(points[1]))
-            tscn += f"polygon = PoolVector2Array( {', '.join(points_list)} )\n__meta__ = "+"{\n"
-            for key, value in object[1].items():
-                tscn += f"\"{key}\": \"{value}\",\n"
-            tscn += "}\n\n"
-
         # Write each layer
         for layer in tilemap.layers:
             tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n'
@@ -388,6 +372,22 @@ class Convert:
             
             # Write to tres
             tscn += ", ".join(flat_layer)+")\n"
+
+        # Object step
+        tscn += "[node name=\"Objects\" type=\"Node2D\" parent=\".\"]\n\n"
+
+        for object_id, object in enumerate(tilemap.objects):
+            tscn += f"[node name=\"{object[1]['type'].capitalize()}{object_id+1}\" type=\"Area2D\" parent=\"Objects\"]\n__meta__ = "+"{\n"
+            for key, value in object[1].items():
+                tscn += f"\"{key}\": \"{value}\",\n"
+            tscn += "}\n\n"
+
+            tscn += f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object[1]['type'].capitalize()}{object_id+1}\"]\n"
+            points_list = []
+            for points in object[0]:
+                points_list.append(str(points[0]))
+                points_list.append(str(points[1]))
+            tscn += f"polygon = PoolVector2Array( {', '.join(points_list)} )\n\n"
 
         # Save data
         self.name        = tilemap.name
