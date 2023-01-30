@@ -141,19 +141,19 @@ class Tilemap:
                     continue
 
                 # Grab properties
-                property = {property.attrib["name"]: property.attrib["value"] for property in object.find("properties")}
+                properties = {property.attrib["name"]: property.attrib["value"] for property in object.find("properties")}
 
                 # Grab points
                 x = int(object.attrib["x"])
                 y = int(object.attrib["y"])
+
                 if object.attrib.get("width"):
                     points = TiledUtil.square_to_points(x, y, object.attrib)
                 else:
                     points = TiledUtil.object_to_points(x, y, object.find("polygon").attrib["points"])
-                print(points)
                 
-                
-
+                # Stache
+                self.objects.append((points, properties))
 
 ###############
 ### TILESET ###
@@ -235,7 +235,7 @@ class TiledUtil:
         """
         width = int(square["width"])
         height = int(square["height"])
-        return [ (x, y), (x + width, y), (x + width, height + y), (0, height + y) ]
+        return [ (x, y), (x + width, y), (x + width, height + y), (x, height + y) ]
 
     @staticmethod
     def object_to_points(x:int, y:int, points_str:str) -> list[tuple]:
@@ -253,16 +253,6 @@ class TiledUtil:
 ##################
 ### GENERATION ###
 ##################
-# [node name="Node" type="Node2D" parent="."]
-
-# [node name="Area2D" type="Area2D" parent="Node"]
-
-# [node name="CollisionShape2D" type="CollisionPolygon2D" parent="Node/Area2D"]
-# polygon = PoolVector2Array( 0, 0, 0, 0, 0, 0, 0, 0 )
-# __meta__ = {
-# "team": "offense",
-# "type": "zone"
-# }
 class Convert:
     """
     Generates necessary files from given filepath
@@ -362,6 +352,22 @@ class Convert:
         tscn += f'[ext_resource path="{tilemap.mode.lower() + "_" + tilemap.name.lower()+".tres"}" type="TileSet" id=1]\n\n'
         tscn += f'[node name="{tilemap.mode + "_" + tilemap.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n'
 
+        # Object step
+        tscn += "[node name=\"Objects\" type=\"Node2D\" parent=\".\"]\nscale = Vector2( 0.25, 0.25 )\n\n"
+
+        for object_id, object in enumerate(tilemap.objects):
+            tscn += f"[node name=\"Object{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n\n"
+            tscn += f"[node name=\"CollisionShape\" type=\"CollisionPolygon2D\" parent=\"Objects/Object{object_id}\"]\n"
+
+            points_list = []
+            for points in object[0]:
+                points_list.append(str(points[0]))
+                points_list.append(str(points[1]))
+            tscn += f"polygon = PoolVector2Array( {', '.join(points_list)} )\n__meta__ = "+"{\n"
+            for key, value in object[1].items():
+                tscn += f"\"{key}\": \"{value}\",\n"
+            tscn += "}\n\n"
+
         # Write each layer
         for layer in tilemap.layers:
             tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n'
@@ -408,5 +414,9 @@ class ConversionError(Exception):
     pass
 
 if __name__ == "__main__":
-    c = Convert("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft.tmx")
+    c = Convert(r"C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx")
+    with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tres", "w") as file:
+        file.write(c.tres)
+    with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tscn", "w") as file:
+        file.write(c.tscn)
     #print(c.tscn[:1000])
