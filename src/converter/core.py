@@ -24,9 +24,7 @@
 import xml.etree.ElementTree as element_tree
 from os.path import join, split, normpath, exists
 
-###############
-### TILEMAP ###
-###############
+### TILEMAP
 class Tilemap:
 
     def __init__(self, filepath:str) -> None:
@@ -142,22 +140,22 @@ class Tilemap:
 
                 # Grab properties
                 properties = {property.attrib["name"]: property.attrib["value"] for property in object.find("properties")}
+                if not properties.get("stage"):
+                    properties["stage"] = 1
 
                 # Grab points
                 x = int(object.attrib["x"])
                 y = int(object.attrib["y"])
 
                 if object.attrib.get("width"):
-                    points = TiledUtil.square_to_points(x, y, object.attrib)
+                    points = TiledUtil.square_to_points(0, 0, object.attrib)
                 else:
-                    points = TiledUtil.object_to_points(x, y, object.find("polygon").attrib["points"])
+                    points = TiledUtil.object_to_points(0, 0, object.find("polygon").attrib["points"])
                 
                 # Stache
-                self.objects.append((points, properties))
+                self.objects.append((points, properties, x, y))
 
-###############
-### TILESET ###
-###############
+### TILESET
 class Tileset:
 
     def __init__(self, filepath:str) -> None:
@@ -221,9 +219,7 @@ class Tileset:
 
                 self.shapes.append((int(tile.attrib["id"]), self.object_id, points))
 
-############
-### UTIL ###
-############
+### UTIL
 class TiledUtil:
     """
     Basic utility for interal usage
@@ -250,19 +246,15 @@ class TiledUtil:
             ))
         return points
 
-##################
-### GENERATION ###
-##################
+### GENERATION
 class Convert:
     """
     Generates necessary files from given filepath
     """
-    def __init__(self, filepath:str) -> None:
+    def __init__(self, tilemap:Tilemap) -> None:
         """
         Generates map file, tileset file, and image paths into instance variables
         """
-        # Create Tilemap object
-        tilemap = Tilemap(filepath)
 
         # Generate tres first
         sets = [tileset[0] for tileset in tilemap.tileset_list]
@@ -377,12 +369,11 @@ class Convert:
         tscn += "[node name=\"Objects\" type=\"Node2D\" parent=\".\"]\n\n"
 
         for object_id, object in enumerate(tilemap.objects):
-            tscn += f"[node name=\"{object[1]['type'].capitalize()}{object_id+1}\" type=\"Area2D\" parent=\"Objects\"]\n__meta__ = "+"{\n"
-            for key, value in object[1].items():
-                tscn += f"\"{key}\": \"{value}\",\n"
-            tscn += "}\n\n"
+            tscn += f"[node name=\"{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n"
+            tscn += f"position = Vector2( {object[2]}, {object[3]} )\n"
+            tscn += "__meta__ = {\n" + "".join([ f"\"{k}\":\"{v}\",\n" for k,v in object[1].items() ]) + "}\n\n"
+            tscn += f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object_id}\"]\n"
 
-            tscn += f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object[1]['type'].capitalize()}{object_id+1}\"]\n"
             points_list = []
             for points in object[0]:
                 points_list.append(str(points[0]))
@@ -400,21 +391,17 @@ class Convert:
         self.tres   = tres
         self.images = [tileset[0].full_image_path for tileset in tilemap.tileset_list]
 
-############
-### KILL ###
-############
+### KILL
 def throw(msg:str=None) -> None:  #type:ignore
     raise(ConversionError(msg))
 
-##############
-### ERRORS ###
-##############
+### ERRORS
 class ConversionError(Exception):
     "Raised when conversion issue occurs"
     pass
 
 if __name__ == "__main__":
-    c = Convert(r"C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx")
+    c = Convert(Tilemap(r"C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx"))
     with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tres", "w") as file:
         file.write(c.tres)
     with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tscn", "w") as file:
