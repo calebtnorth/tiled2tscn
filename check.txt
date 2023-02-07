@@ -1,0 +1,9 @@
+tilemap
+check mode (ad, koth, 3p, pl)
+check time (>0s)
+
+points
+check type (spawn, zone, hill, point)
+check team (offense, defense)
+check stage (None, 1 - 3) [incremental]
+check timeup (>0s, <time)

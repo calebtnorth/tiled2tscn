@@ -24,7 +24,11 @@
 import sys
 sys.dont_write_bytecode = True
 
-from converter import Convert, ConversionError
+from converter import Convert, Tilemap, ConversionError
+from pickle import dumps, loads
+from os import getenv, mkdir, listdir, remove
+from os.path import join, normpath, split
+from shutil import copyfile
 
 from PySide6.QtCore import *
 from PySide6.QtGui import *
@@ -50,75 +54,208 @@ class MainWindow(QMainWindow):
         self.setMinimumWidth(300)
 
         # MAIN WINDOW
-        main_widget = QWidget()
-        main_layout = QHBoxLayout()
-        main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
+        self.main_widget = QWidget()
+        self.main_layout = QHBoxLayout()
+        self.main_widget.setLayout(self.main_layout)
+        self.setCentralWidget(self.main_widget)
 
+        # TOOLBAR
+        self.config_path = normpath(join(getenv("APPDATA"), "tiled2hva/config"))
+        self.menu = self.menuBar()
 
-        # BUTTONS
-        buttons = QWidget()
-        buttons_layout = QVBoxLayout()
-        buttons.setLayout(buttons_layout)
-        main_layout.addWidget(buttons)
+        # File Menu
+        self.file_menu = self.menu.addMenu("&File")
 
-        select_file_button = QPushButton(text="Select file")
-        select_file_button.clicked.connect(self.select_file)
-        select_file_button.setFixedWidth(100)
-        buttons_layout.addWidget(select_file_button)
+        self.save_maps_list = QAction("&Save maps list", self)
+        self.save_maps_list.setStatusTip("Save the list of maps")
+        self.save_maps_list.triggered.connect(self.save_maps_list_items)
+        self.file_menu.addAction(self.save_maps_list)
 
-        self.generate_button = QPushButton(text="Generate")
-        self.generate_button.clicked.connect(self.generate_file)
-        self.generate_button.setDisabled(True)
-        self.generate_button.setFixedWidth(100)
-        buttons_layout.addWidget(self.generate_button)
+        self.load_maps_list = QAction("&Load maps list", self)
+        self.load_maps_list.setStatusTip("Load the list of maps")
+        self.load_maps_list.triggered.connect(self.load_maps_list_items)
+        self.file_menu.addAction(self.load_maps_list)
 
-        # INFORMATION BOX
-        info_box = QGroupBox()
-        info_box_layout = QVBoxLayout()
-        info_box.setLayout(info_box_layout)
-        main_layout.addWidget(info_box)
+        self.file_menu.addSeparator()
 
-        self.tilemap_name = QLabel("")
-        info_box_layout.addWidget(self.tilemap_name)
+        self.save_destination_list = QAction("S&ave destination list", self)
+        self.save_destination_list.setStatusTip("Save the list of maps")
+        self.save_destination_list.triggered.connect(self.save_destination_list_items)
+        self.file_menu.addAction(self.save_destination_list)
 
-        self.tilemap_mode = QLabel("")
-        info_box_layout.addWidget(self.tilemap_mode)
+        self.load_destination_list = QAction("L&oad destination list", self)
+        self.load_destination_list.setStatusTip("Save the list of maps")
+        self.load_destination_list.triggered.connect(self.load_destination_list_items)
+        self.file_menu.addAction(self.load_destination_list)
+        # self.load_maps_list
+        # self.save_destination_list
+        # self.load_destination_list
+        
+        self.maps_menu = self.menu.addMenu("&Maps")
 
-        self.tilemap_tile_size = QLabel("")
-        info_box_layout.addWidget(self.tilemap_tile_size)
+        self.destinations_menu = self.menu.addMenu("&Destinations")
 
-        self.tilemap_layers = QLabel("")
-        info_box_layout.addWidget(self.tilemap_layers)
+        # MAP SELECTION
+        self.selection_box = QGroupBox()
+        self.selection_box_layout = QGridLayout()
+        self.selection_box.setLayout(self.selection_box_layout)
+        self.main_layout.addWidget(self.selection_box)
+        
+        self.map_list = QListWidget()
+        self.selection_box_layout.addWidget(self.map_list, 0, 0, 1, 2)
 
-        self.tilemap_objects = QLabel("")
-        info_box_layout.addWidget(self.tilemap_objects)
+        self.add_map = QPushButton("Add map")
+        self.add_map.clicked.connect(self.select_map_item)
+        self.selection_box_layout.addWidget(self.add_map, 1, 0)
+        
+        self.remove_map = QPushButton("Remove map")
+        self.remove_map.clicked.connect(self.remove_map_item)
+        self.selection_box_layout.addWidget(self.remove_map, 1, 1)
 
-        # STATUS BAR
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("No file selected")
-        self.selected_file_path = ""
+        # OPTIONS
+        self.options = QWidget()
+        self.options_layout = QVBoxLayout()
+        self.options_layout.setAlignment(Qt.AlignTop)
+        self.options.setLayout(self.options_layout)
+        self.main_layout.addWidget(self.options)
+
+        self.convert = QPushButton("Convert")
+        self.convert.clicked.connect(self.convert_maps)
+        self.options_layout.addWidget(self.convert)
+
+        self.nest = QCheckBox("Nest")
+        self.options_layout.addWidget(self.nest)
+
+        # DESTINATIONS
+        self.destination_box = QGroupBox()
+        self.destination_box_layout = QGridLayout()
+        self.destination_box.setLayout(self.destination_box_layout)
+        self.main_layout.addWidget(self.destination_box)
+        
+        self.destination_list = QListWidget()
+        self.destination_box_layout.addWidget(self.destination_list, 0, 0, 1, 2)
+
+        self.add_destination = QPushButton("Add destination")
+        self.add_destination.clicked.connect(self.select_destination_item)
+        self.destination_box_layout.addWidget(self.add_destination, 1, 0)
+        
+        self.remove_destination = QPushButton("Remove destination")
+        self.remove_destination.clicked.connect(self.remove_destination_item)
+        self.destination_box_layout.addWidget(self.remove_destination, 1, 1)
 
         self.show()
 
-    def select_file(self):
+    def select_map_item(self):
         selected_file_path:str = QFileDialog.getOpenFileName(self, "Open File", "C:\\", "Tilemap files (*.tmx)")[0]
-        if not selected_file_path:
-            if not self.selected_file_path:
-                self.generate_button.setDisabled(True)
-                return
-            self.generate_button.setDisabled(False)
+        if selected_file_path:
+            self.map_list.addItem(selected_file_path)
+
+    def remove_map_item(self):
+        self.map_list.takeItem(self.map_list.currentRow())
+
+    def select_destination_item(self):
+        selected_folder_path:str = QFileDialog.getExistingDirectory()
+        if selected_folder_path:
+            self.destination_list.addItem(selected_folder_path)
+
+    def remove_destination_item(self):
+        self.destination_list.takeItem(self.destination_list.currentRow())
+
+    def convert_maps(self):
+        # Check map list
+        if self.map_list.count() < 1:
+            QMessageBox.warning(
+                self,
+                "Missing maps",
+                "Please add a valid .tmx to the map list",
+                buttons=QMessageBox.Ok
+            )
             return
 
-        self.selected_file_path = selected_file_path
-        self.status_bar.showMessage(self.selected_file_path)
-        self.generate_button.setDisabled(False)
+        # Check destination list
+        if self.destination_list.count() < 1:
+            QMessageBox.warning(
+                self,
+                "Missing destinations",
+                "Please add a valid destination folder",
+                buttons=QMessageBox.Ok
+            )
+            return
 
-    def generate_file(self):
-        converter = Convert(self.selected_file_path)
-        self.tilemap_name.setText(f"Name: {converter.name}")
-        self.tilemap_mode.setText(f"Mode: {converter.mode}")
+        for map_id in range(0, self.map_list.count()):
+            for destination_id in range(0, self.destination_list.count()):
+                map = self.map_list.item(map_id).text()
+                destination = self.destination_list.item(destination_id).text()
+
+                tilemap = Tilemap(map)
+                convert = Convert(tilemap)
+                map_name = f"{tilemap.mode}_{tilemap.name}"
+                full_destination = normpath(join(destination, f"{map_name}/"))
+
+                try:
+                    mkdir(full_destination)
+                except Exception as e:
+                    for file in listdir(full_destination):
+                        remove(join(full_destination, file))
+
+
+                with open(join(full_destination, f"{map_name}.tres"), "w+") as file:
+                    file.write(convert.tres)
+
+                with open(join(full_destination, f"{map_name}.tscn"), "w+") as file:
+                    file.write(convert.tscn)
+
+                for image in convert.images:
+                    origin = join(split(map)[0], image)
+                    destination = join(join(destination, f"{map_name}"), image)
+                    copyfile(origin, destination)
+
+    # Saving, loading
+    def save_maps_list_items(self):
+        try:
+            config = [[], self.load_list_items(1)]
+        except Exception as e:
+            config = [[], []]
+
+        for item in range(0, self.map_list.count()):
+            config[0].append(self.map_list.item(item).text())
+
+        with open(self.config_path, "w") as file:
+            file.write(dumps(config))
+
+    def load_maps_list_items(self):
+        config = self.load_list_items(0)
+        self.map_list.clear()
+        for item in config:
+            self.map_list.addItem(item)
+
+    def save_destination_list_items(self):
+        try:
+            config = [self.load_list_items(0), []]
+        except Exception as e:
+            config = [[], []]
+
+        for item in range(0, self.destination_list.count()):
+            config[1].append(self.destination_list.item(item).text())
+
+        with open(self.config_path, "w") as file:
+            file.write(dumps(config))
+
+    def load_destination_list_items(self):
+        config = self.load_list_items(0)
+        self.map_list.clear()
+        for item in config:
+            self.map_list.addItem(item)        
+
+    def load_list_items(self, i):
+        config = []
+        with open(self.config_path, "r+") as file:
+            file_contents = file.read()
+            if file_contents != "":
+                config = loads(file_contents)[i]
+
+        return config
+            
 
 ###########
 ### RUN ###

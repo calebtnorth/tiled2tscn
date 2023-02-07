@@ -369,7 +369,11 @@ class Convert:
         tscn += "[node name=\"Objects\" type=\"Node2D\" parent=\".\"]\n\n"
 
         for object_id, object in enumerate(tilemap.objects):
-            tscn += f"[node name=\"{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n"
+            if object[1].get("type") == "zone":
+                tscn += f"[node name=\"{object_id}\" type=\"KinematicBody2D\" parent=\"Objects\"]\n"
+            else:
+                tscn += f"[node name=\"{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n"
+
             tscn += f"position = Vector2( {object[2]}, {object[3]} )\n"
             tscn += "__meta__ = {\n" + "".join([ f"\"{k}\":\"{v}\",\n" for k,v in object[1].items() ]) + "}\n\n"
             tscn += f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object_id}\"]\n"
@@ -399,11 +403,3 @@ def throw(msg:str=None) -> None:  #type:ignore
 class ConversionError(Exception):
     "Raised when conversion issue occurs"
     pass
-
-if __name__ == "__main__":
-    c = Convert(Tilemap(r"C:\Users\caleb\Programming\HVA\Projects\Client\Project\Assets\Maps\koth_mineshaft\koth_mineshaft.tmx"))
-    with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tres", "w") as file:
-        file.write(c.tres)
-    with open("C:\\Users\\caleb\\Programming\\HVA\\Projects\\Client\\Project\\Assets\\Maps\\koth_mineshaft\\koth_mineshaft\\koth_mineshaft.tscn", "w") as file:
-        file.write(c.tscn)
-    #print(c.tscn[:1000])

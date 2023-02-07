@@ -1,1 +1,1 @@
-from converter.core import Convert, ConversionError
+from converter.core import Convert, ConversionError, Tilemap
