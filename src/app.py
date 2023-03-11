@@ -63,38 +63,6 @@ class MainWindow(QMainWindow):
         self.config_path = normpath(join(getenv("APPDATA"), "tiled2hva/config"))
         self.menu = self.menuBar()
 
-        # File Menu
-        self.file_menu = self.menu.addMenu("&File")
-
-        self.save_maps_list = QAction("&Save maps list", self)
-        self.save_maps_list.setStatusTip("Save the list of maps")
-        self.save_maps_list.triggered.connect(self.save_maps_list_items)
-        self.file_menu.addAction(self.save_maps_list)
-
-        self.load_maps_list = QAction("&Load maps list", self)
-        self.load_maps_list.setStatusTip("Load the list of maps")
-        self.load_maps_list.triggered.connect(self.load_maps_list_items)
-        self.file_menu.addAction(self.load_maps_list)
-
-        self.file_menu.addSeparator()
-
-        self.save_destination_list = QAction("S&ave destination list", self)
-        self.save_destination_list.setStatusTip("Save the list of maps")
-        self.save_destination_list.triggered.connect(self.save_destination_list_items)
-        self.file_menu.addAction(self.save_destination_list)
-
-        self.load_destination_list = QAction("L&oad destination list", self)
-        self.load_destination_list.setStatusTip("Save the list of maps")
-        self.load_destination_list.triggered.connect(self.load_destination_list_items)
-        self.file_menu.addAction(self.load_destination_list)
-        # self.load_maps_list
-        # self.save_destination_list
-        # self.load_destination_list
-        
-        self.maps_menu = self.menu.addMenu("&Maps")
-
-        self.destinations_menu = self.menu.addMenu("&Destinations")
-
         # MAP SELECTION
         self.selection_box = QGroupBox()
         self.selection_box_layout = QGridLayout()
@@ -185,18 +153,22 @@ class MainWindow(QMainWindow):
         for map_id in range(0, self.map_list.count()):
             for destination_id in range(0, self.destination_list.count()):
                 map = self.map_list.item(map_id).text()
-                destination = self.destination_list.item(destination_id).text()
 
                 tilemap = Tilemap(map)
                 convert = Convert(tilemap)
                 map_name = f"{tilemap.mode}_{tilemap.name}"
-                full_destination = normpath(join(destination, f"{map_name}/"))
+                # path to destination folder
+                full_destination = normpath(join(
+                    self.destination_list.item(destination_id).text(), # grab item path from qlist
+                    f"{map_name}/" if self.nest.isChecked() else "" # grab name
+                ))
 
                 try:
                     mkdir(full_destination)
-                except Exception as e:
-                    for file in listdir(full_destination):
-                        remove(join(full_destination, file))
+                except FileExistsError as e:
+                    if self.nest.isChecked():    
+                        for file in listdir(full_destination):
+                            remove(join(full_destination, file))
 
 
                 with open(join(full_destination, f"{map_name}.tres"), "w+") as file:
@@ -207,59 +179,11 @@ class MainWindow(QMainWindow):
 
                 for image in convert.images:
                     origin = join(split(map)[0], image)
-                    destination = join(join(destination, f"{map_name}"), image)
-                    copyfile(origin, destination)
-
-    # Saving, loading
-    def save_maps_list_items(self):
-        try:
-            config = [[], self.load_list_items(1)]
-        except Exception as e:
-            config = [[], []]
-
-        for item in range(0, self.map_list.count()):
-            config[0].append(self.map_list.item(item).text())
-
-        with open(self.config_path, "w") as file:
-            file.write(dumps(config))
-
-    def load_maps_list_items(self):
-        config = self.load_list_items(0)
-        self.map_list.clear()
-        for item in config:
-            self.map_list.addItem(item)
-
-    def save_destination_list_items(self):
-        try:
-            config = [self.load_list_items(0), []]
-        except Exception as e:
-            config = [[], []]
-
-        for item in range(0, self.destination_list.count()):
-            config[1].append(self.destination_list.item(item).text())
-
-        with open(self.config_path, "w") as file:
-            file.write(dumps(config))
-
-    def load_destination_list_items(self):
-        config = self.load_list_items(0)
-        self.map_list.clear()
-        for item in config:
-            self.map_list.addItem(item)        
-
-    def load_list_items(self, i):
-        config = []
-        with open(self.config_path, "r+") as file:
-            file_contents = file.read()
-            if file_contents != "":
-                config = loads(file_contents)[i]
-
-        return config
+                    img_destination = join(full_destination, image)
+                    copyfile(origin, img_destination)
             
 
-###########
-### RUN ###
-###########
+### RUN
 if __name__ == "__main__":
     app = Application(sys.argv)
     main_window = MainWindow()
