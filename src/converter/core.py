@@ -340,14 +340,22 @@ class Convert:
             f"[gd_resource type=\"TileSet\" load_steps={ext_resource_id+sub_resource_id+1} format=2]\n\n{tres}"
 
         # Generate tscn
-        tscn = "[gd_scene load_steps=2 format=2]\n\n"
-        tscn += f'[ext_resource path="{tilemap.mode.lower() + "_" + tilemap.name.lower()+".tres"}" type="TileSet" id=1]\n\n'
-        tscn += f'[node name="{tilemap.mode + "_" + tilemap.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n'
+        tscn = \
+          f'[gd_scene load_steps=3 format=2]\n\n\
+            [ext_resource path="{tilemap.mode.lower() + "_" + tilemap.name.lower()+".tres"}" type="TileSet" id=1]\n\n\
+            [ext_resource path="res://Scripts/Objects/Objective.gd" type="Script" id=2]\n\n\
+            [node name="{tilemap.mode + "_" + tilemap.name.lower()}" type="Node2D"]\nscale = Vector2( 0.25, 0.25 )\n\n\
+            __meta__ = {{\
+                "mode":"{tilemap.mode}"\
+            }}'
 
         # Write each layer
         for layer in tilemap.layers:
-            tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n'
-            tscn += f'cell_size = Vector2( {tilemap.tile_size[0]}, {tilemap.tile_size[1]} )\ncell_custom_transform = Transform2D( 16, 0, 0, 16, 0, 0 )\nformat = 1\ntile_data = PoolIntArray('
+            tscn += f'[node name="{layer[0]}" type="TileMap" parent="."]\ntile_set = ExtResource( 1 )\n \
+                    cell_size = Vector2( {tilemap.tile_size[0]}, {tilemap.tile_size[1]} )\n \
+                    cell_custom_transform = Transform2D( 16, 0, 0, 16, 0, 0 )\n \
+                    format = 1\n \
+                    tile_data = PoolIntArray('
             flat_layer = []
             
             # Flatten layer array
@@ -371,12 +379,27 @@ class Convert:
         for object_id, object in enumerate(tilemap.objects):
             if object[1].get("type") == "zone":
                 tscn += f"[node name=\"{object_id}\" type=\"KinematicBody2D\" parent=\"Objects\"]\n"
+                # Set collision masks
+                if object[1].get("team") == "offense":
+                    tscn += "collision_layer = 2\ncollision_mask = 4\n"
+                else:
+                    tscn += "collision_layer = 4\ncollision_mask = 2\n"
+
             else:
                 tscn += f"[node name=\"{object_id}\" type=\"Area2D\" parent=\"Objects\"]\n"
+                if object[1].get("type") == "point":
+                    tscn += "collision_layer = 0\ncollision_mask = 24\n"
+                else:
+                    tscn += "collision_layer = 0\ncollision_mask = 0\n"
 
-            tscn += f"position = Vector2( {object[2]}, {object[3]} )\n"
-            tscn += "__meta__ = {\n" + "".join([ f"\"{k}\":\"{v}\",\n" for k,v in object[1].items() ]) + "}\n\n"
-            tscn += f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object_id}\"]\n"
+
+            if object[1].get("type") == "point":
+                tscn += "script = ExtResource( 2 )"
+
+            # i know this is a super unpythonic way to do list comprehension but i think it's kinda funny so i'm keeping it
+            tscn += f"position = Vector2( {object[2]}, {object[3]} )\n" + \
+                     "__meta__ = {\n" + "".join([ f"\"{k}\":\"{v}\",\n" for k,v in object[1].items() ]) + "}\n\n" + \
+                    f"[node name=\"Shape\" type=\"CollisionPolygon2D\" parent=\"Objects/{object_id}\"]\n"
 
             points_list = []
             for points in object[0]:
